@@ -49,11 +49,18 @@ async function handleSessionActive(user) {
         .eq('id', user.id)
         .single();
 
-    if (error || !profile) {
-        showToast('No se encontró un perfil institucional para esta cuenta. Contacta al administrador.', 'error', 6000);
-        await db.auth.signOut();
-        return;
-    }
+    if (error) {
+    console.error('Error de Supabase al buscar perfil:', error);
+    showToast('Error al buscar perfil: ' + error.message, 'error', 8000);
+    await db.auth.signOut();
+    return;
+}
+
+if (!profile) {
+    showToast('No se encontró un perfil institucional para esta cuenta.', 'error', 6000);
+    await db.auth.signOut();
+    return;
+}
 
     APP.profile = profile;
 
