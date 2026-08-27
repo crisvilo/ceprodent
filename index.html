@@ -263,69 +263,75 @@
         </div>
     </section>
 
-    <!-- ---------- 4. PANEL DEL ADMINISTRADOR ---------- -->
+    <!-- ---------- 4. PANEL DEL ADMINISTRADOR CEPRODENT 2.0 ---------- -->
     <section id="adminView" class="view hidden">
         <div class="dashboard-header">
             <div>
                 <h2>Panel de administración</h2>
-                <p class="text-muted">Crea las cuentas de acceso de docentes y estudiantes de CEPRODENT.</p>
+                <p class="text-muted">Gestiona docentes, estudiantes y programas académicos.</p>
             </div>
         </div>
 
-        <div class="teacher-panel">
-            <div class="panel-header">
-                <div>
-                    <div class="panel-title"><i class="fa-solid fa-user-plus"></i> Crear nueva cuenta</div>
-                    <span class="panel-subtitle">La persona podrá iniciar sesión de inmediato con estos datos.</span>
-                </div>
+        <div id="adminDashboardPanel">
+            <div class="admin-stats-grid">
+                <div class="admin-stat-card"><i class="fa-solid fa-chalkboard-user"></i><div><span id="statDocentesActivos">0</span><small>Docentes activos</small></div></div>
+                <div class="admin-stat-card"><i class="fa-solid fa-user-slash"></i><div><span id="statDocentesInactivos">0</span><small>Docentes inactivos</small></div></div>
+                <div class="admin-stat-card"><i class="fa-solid fa-user-graduate"></i><div><span id="statEstudiantesActivos">0</span><small>Estudiantes activos</small></div></div>
+                <div class="admin-stat-card"><i class="fa-solid fa-user-clock"></i><div><span id="statEstudiantesInactivos">0</span><small>Estudiantes inactivos</small></div></div>
+                <div class="admin-stat-card"><i class="fa-solid fa-book-open"></i><div><span id="statProgramas">0</span><small>Programas activos</small></div></div>
             </div>
 
-            <form id="adminCreateUserForm" class="question-form">
-                <div class="form-group">
-                    <label for="adminNewRol">Tipo de cuenta</label>
-                    <select id="adminNewRol" class="form-control" required>
-                        <option value="docente">Docente</option>
-                        <option value="estudiante">Estudiante</option>
-                    </select>
-                </div>
-                <div class="options-grid">
-                    <div class="form-group">
-                        <label for="adminNewNombres">Nombres</label>
-                        <input type="text" id="adminNewNombres" class="form-control" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="adminNewApellidos">Apellidos</label>
-                        <input type="text" id="adminNewApellidos" class="form-control" required>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label for="adminNewEmail">Correo institucional</label>
-                    <div class="input-icon-wrapper">
-                        <i class="fa-solid fa-envelope"></i>
-                        <input type="email" id="adminNewEmail" class="form-control" placeholder="nombre@ceprodent.edu.co" required>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label for="adminNewPassword">Contraseña temporal</label>
-                    <div class="input-icon-wrapper">
-                        <i class="fa-solid fa-lock"></i>
-                        <input type="password" id="adminNewPassword" class="form-control" minlength="6" placeholder="Mínimo 6 caracteres" required>
-                    </div>
-                </div>
-                <button type="submit" class="btn-primary btn-compact" id="btnCrearUsuarioAdmin">
-                    <i class="fa-solid fa-user-plus"></i> Crear cuenta
-                </button>
-            </form>
+            <div class="admin-modules-grid">
+                <button type="button" class="admin-module-card" data-admin-module="docentes"><i class="fa-solid fa-chalkboard-user"></i><strong>Módulo Docentes</strong><span>Crear y administrar docentes</span></button>
+                <button type="button" class="admin-module-card" data-admin-module="estudiantes"><i class="fa-solid fa-user-graduate"></i><strong>Módulo Estudiantes</strong><span>Crear y administrar estudiantes</span></button>
+                <button type="button" class="admin-module-card" data-admin-module="programas"><i class="fa-solid fa-book"></i><strong>Módulo Programas</strong><span>Administrar programas académicos</span></button>
+            </div>
+
+            <div class="section-block">
+                <h3 class="section-title"><i class="fa-solid fa-ranking-star"></i> Programas con más estudiantes</h3>
+                <div id="adminTopProgramas" class="students-list"></div>
+            </div>
         </div>
 
-        <div class="section-block">
-            <h3 class="section-title"><i class="fa-solid fa-chalkboard-user"></i> Docentes registrados</h3>
-            <div id="adminDocentesList" class="students-list"></div>
+        <div id="adminDocentesPanel" class="admin-module-panel hidden">
+            <button type="button" class="btn-secondary btn-compact admin-back"><i class="fa-solid fa-arrow-left"></i> Volver al Dashboard</button>
+            <div class="dashboard-header"><div><h2>Módulo Docentes</h2><p class="text-muted">Crea y administra los docentes institucionales.</p></div></div>
+            <div class="teacher-panel">
+                <form id="adminCreateDocenteForm" class="question-form">
+                    <div class="options-grid"><div class="form-group"><label>Nombres</label><input id="docenteNombres" class="form-control" required></div><div class="form-group"><label>Apellidos</label><input id="docenteApellidos" class="form-control" required></div></div>
+                    <div class="form-group"><label>Correo</label><input type="email" id="docenteEmail" class="form-control" required></div>
+                    <div class="form-group"><label>Contraseña temporal</label><input type="password" id="docentePassword" class="form-control" minlength="6" required></div>
+                    <button class="btn-primary btn-compact" id="btnCrearDocente"><i class="fa-solid fa-user-plus"></i> Crear docente</button>
+                </form>
+            </div>
+            <div class="section-block"><h3 class="section-title">Docentes registrados</h3><div id="adminDocentesList" class="students-list"></div></div>
         </div>
 
-        <div class="section-block">
-            <h3 class="section-title"><i class="fa-solid fa-user-graduate"></i> Estudiantes registrados</h3>
-            <div id="adminEstudiantesList" class="students-list"></div>
+        <div id="adminEstudiantesPanel" class="admin-module-panel hidden">
+            <button type="button" class="btn-secondary btn-compact admin-back"><i class="fa-solid fa-arrow-left"></i> Volver al Dashboard</button>
+            <div class="dashboard-header"><div><h2>Módulo Estudiantes</h2><p class="text-muted">Todo estudiante debe estar asociado a un programa.</p></div></div>
+            <div class="teacher-panel">
+                <form id="adminCreateEstudianteForm" class="question-form">
+                    <div class="options-grid"><div class="form-group"><label>Nombres</label><input id="estudianteNombres" class="form-control" required></div><div class="form-group"><label>Apellidos</label><input id="estudianteApellidos" class="form-control" required></div></div>
+                    <div class="form-group"><label>Programa</label><select id="estudiantePrograma" class="form-control" required><option value="">Cargando programas...</option></select></div>
+                    <div class="form-group"><label>Correo</label><input type="email" id="estudianteEmail" class="form-control" required></div>
+                    <div class="form-group"><label>Contraseña temporal</label><input type="password" id="estudiantePassword" class="form-control" minlength="6" required></div>
+                    <button class="btn-primary btn-compact" id="btnCrearEstudiante"><i class="fa-solid fa-user-plus"></i> Crear estudiante</button>
+                </form>
+            </div>
+            <div class="section-block"><h3 class="section-title">Estudiantes registrados</h3><div id="adminEstudiantesList" class="students-list"></div></div>
+        </div>
+
+        <div id="adminProgramasPanel" class="admin-module-panel hidden">
+            <button type="button" class="btn-secondary btn-compact admin-back"><i class="fa-solid fa-arrow-left"></i> Volver al Dashboard</button>
+            <div class="dashboard-header"><div><h2>Módulo Programas</h2><p class="text-muted">Crea y administra los programas académicos.</p></div></div>
+            <div class="teacher-panel">
+                <form id="adminCreateProgramaForm" class="question-form">
+                    <div class="form-group"><label>Nombre del programa</label><input id="adminProgramaNombre" class="form-control" placeholder="Ej. Técnico en Sistemas" required></div>
+                    <button class="btn-primary btn-compact" id="btnCrearPrograma"><i class="fa-solid fa-plus"></i> Crear programa</button>
+                </form>
+            </div>
+            <div class="section-block"><h3 class="section-title">Programas creados</h3><div id="adminProgramasList" class="students-list"></div></div>
         </div>
     </section>
 
