@@ -13,8 +13,8 @@
  * sql/schema.sql, no por mantener esta llave en secreto.
  * ----------------------------------------------------------------------
  */
-const SUPABASE_URL = 'https://anryxsgiezirvkxrquup.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_fSt83usREuzeGCttNZHt-Q_tzN5jueP';
+const SUPABASE_URL = 'https://qrxekxxazvnopcqoowbr.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_K-h_DsBfh05CmCJ6s244eQ_QaknLJ4V';
 
 // Se usa el nombre "db" (en vez de "supabase") para no chocar con el
 // objeto global "supabase" que crea el SDK cargado por CDN.

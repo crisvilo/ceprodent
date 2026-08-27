@@ -6,7 +6,7 @@
  * ----------------------------------------------------------------------
  */
 
-const APP_VIEWS = ['authView', 'studentView', 'teacherView', 'quizView', 'resultView'];
+const APP_VIEWS = ['authView', 'studentView', 'teacherView', 'adminView', 'quizView', 'resultView'];
 
 /** Muestra una vista principal y oculta las demás. */
 function switchView(viewId) {

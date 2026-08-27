@@ -388,6 +388,7 @@ async function handleDeleteQuestion(preguntaId) {
 async function loadModuleStudents(moduloId) {
     const list = document.getElementById('studentsList');
     list.innerHTML = '<div class="loading-inline"><i class="fa-solid fa-spinner"></i>Cargando estudiantes...</div>';
+    hideCreateStudentInline();
 
     const { data, error } = await db
         .from('inscripciones')
@@ -433,7 +434,9 @@ async function handleEnrollStudent(event) {
         if (buscarError) throw buscarError;
 
         if (!estudiantes || !estudiantes.length) {
-            throw new Error('No se encontró ningún estudiante con ese correo. Verifica que ya tenga una cuenta creada.');
+            // No existe ninguna cuenta con ese correo: ofrecemos crearla en el momento.
+            showCreateStudentInline(email);
+            return;
         }
 
         const { error: insertError } = await db
@@ -448,11 +451,67 @@ async function handleEnrollStudent(event) {
         }
 
         document.getElementById('enrollForm').reset();
+        hideCreateStudentInline();
         showToast('Estudiante inscrito correctamente.', 'success');
         await loadModuleStudents(moduloId);
         await fetchTeacherModulesData();
     } catch (error) {
         showToast(friendlyError(error), 'error');
+    } finally {
+        setButtonLoading(btn, false);
+    }
+}
+
+/** Muestra el mini-formulario para crear una cuenta de estudiante nueva,
+ *  con el correo ya escrito por el docente en el paso anterior. */
+function showCreateStudentInline(email) {
+    const panel = document.getElementById('createStudentInline');
+    document.getElementById('createStudentEmailPreview').textContent = email;
+    panel.dataset.email = email;
+    panel.classList.remove('hidden');
+    document.getElementById('newStudentNombres').focus();
+}
+
+function hideCreateStudentInline() {
+    const panel = document.getElementById('createStudentInline');
+    panel.classList.add('hidden');
+    panel.removeAttribute('data-email');
+    document.getElementById('createStudentForm').reset();
+}
+
+async function handleCreateStudentInline(event) {
+    event.preventDefault();
+    const btn = document.getElementById('btnCreateStudent');
+    const moduloId = APP.teacher.currentModuleId;
+    const email = document.getElementById('createStudentInline').dataset.email;
+
+    if (!email) {
+        showToast('Vuelve a escribir el correo en el campo de arriba.', 'error');
+        return;
+    }
+
+    const payload = {
+        rol: 'estudiante',
+        nombres: document.getElementById('newStudentNombres').value.trim(),
+        apellidos: document.getElementById('newStudentApellidos').value.trim(),
+        email,
+        password: document.getElementById('newStudentPassword').value,
+        modulo_id: moduloId,
+    };
+
+    setButtonLoading(btn, true, 'Creando...');
+    try {
+        const { data, error } = await db.functions.invoke('create-user', { body: payload });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+
+        showToast('Estudiante creado e inscrito correctamente.', 'success');
+        document.getElementById('enrollForm').reset();
+        hideCreateStudentInline();
+        await loadModuleStudents(moduloId);
+        await fetchTeacherModulesData();
+    } catch (error) {
+        showToast(friendlyError(error), 'error', 6000);
     } finally {
         setButtonLoading(btn, false);
     }
@@ -515,4 +574,5 @@ function initTeacherModule() {
     document.getElementById('evalToggle').addEventListener('change', handleToggleEvaluation);
     document.getElementById('questionForm').addEventListener('submit', handleAddQuestion);
     document.getElementById('enrollForm').addEventListener('submit', handleEnrollStudent);
+    document.getElementById('createStudentForm').addEventListener('submit', handleCreateStudentInline);
 }
