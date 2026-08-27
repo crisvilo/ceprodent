@@ -225,6 +225,33 @@
                             <i class="fa-solid fa-user-plus"></i> Inscribir
                         </button>
                     </form>
+
+                    <div id="createStudentInline" class="question-form hidden">
+                        <p class="text-muted" style="margin-bottom:0.9rem;">
+                            <i class="fa-solid fa-circle-info"></i>
+                            No existe una cuenta con el correo <strong id="createStudentEmailPreview"></strong>. Puedes crearla aquí mismo y quedará inscrita en este módulo:
+                        </p>
+                        <form id="createStudentForm">
+                            <div class="options-grid">
+                                <div class="form-group" style="margin-bottom:0;">
+                                    <label for="newStudentNombres">Nombres</label>
+                                    <input type="text" id="newStudentNombres" class="form-control" required>
+                                </div>
+                                <div class="form-group" style="margin-bottom:0;">
+                                    <label for="newStudentApellidos">Apellidos</label>
+                                    <input type="text" id="newStudentApellidos" class="form-control" required>
+                                </div>
+                            </div>
+                            <div class="form-group" style="margin-top:1.1rem;">
+                                <label for="newStudentPassword">Contraseña temporal</label>
+                                <input type="password" id="newStudentPassword" class="form-control" minlength="6" placeholder="Mínimo 6 caracteres" required>
+                            </div>
+                            <button type="submit" class="btn-primary btn-compact" id="btnCreateStudent">
+                                <i class="fa-solid fa-user-plus"></i> Crear cuenta e inscribir
+                            </button>
+                        </form>
+                    </div>
+
                     <div id="studentsList" class="students-list"></div>
                 </div>
 
@@ -236,7 +263,73 @@
         </div>
     </section>
 
-    <!-- ---------- 4. MODAL: NUEVO MÓDULO ---------- -->
+    <!-- ---------- 4. PANEL DEL ADMINISTRADOR ---------- -->
+    <section id="adminView" class="view hidden">
+        <div class="dashboard-header">
+            <div>
+                <h2>Panel de administración</h2>
+                <p class="text-muted">Crea las cuentas de acceso de docentes y estudiantes de CEPRODENT.</p>
+            </div>
+        </div>
+
+        <div class="teacher-panel">
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title"><i class="fa-solid fa-user-plus"></i> Crear nueva cuenta</div>
+                    <span class="panel-subtitle">La persona podrá iniciar sesión de inmediato con estos datos.</span>
+                </div>
+            </div>
+
+            <form id="adminCreateUserForm" class="question-form">
+                <div class="form-group">
+                    <label for="adminNewRol">Tipo de cuenta</label>
+                    <select id="adminNewRol" class="form-control" required>
+                        <option value="docente">Docente</option>
+                        <option value="estudiante">Estudiante</option>
+                    </select>
+                </div>
+                <div class="options-grid">
+                    <div class="form-group">
+                        <label for="adminNewNombres">Nombres</label>
+                        <input type="text" id="adminNewNombres" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="adminNewApellidos">Apellidos</label>
+                        <input type="text" id="adminNewApellidos" class="form-control" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="adminNewEmail">Correo institucional</label>
+                    <div class="input-icon-wrapper">
+                        <i class="fa-solid fa-envelope"></i>
+                        <input type="email" id="adminNewEmail" class="form-control" placeholder="nombre@ceprodent.edu.co" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="adminNewPassword">Contraseña temporal</label>
+                    <div class="input-icon-wrapper">
+                        <i class="fa-solid fa-lock"></i>
+                        <input type="password" id="adminNewPassword" class="form-control" minlength="6" placeholder="Mínimo 6 caracteres" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary btn-compact" id="btnCrearUsuarioAdmin">
+                    <i class="fa-solid fa-user-plus"></i> Crear cuenta
+                </button>
+            </form>
+        </div>
+
+        <div class="section-block">
+            <h3 class="section-title"><i class="fa-solid fa-chalkboard-user"></i> Docentes registrados</h3>
+            <div id="adminDocentesList" class="students-list"></div>
+        </div>
+
+        <div class="section-block">
+            <h3 class="section-title"><i class="fa-solid fa-user-graduate"></i> Estudiantes registrados</h3>
+            <div id="adminEstudiantesList" class="students-list"></div>
+        </div>
+    </section>
+
+    <!-- ---------- 5. MODAL: NUEVO MÓDULO ---------- -->
     <div id="newModuleModal" class="modal-overlay hidden">
         <div class="modal-card">
             <div class="modal-header">
@@ -271,7 +364,7 @@
         </div>
     </div>
 
-    <!-- ---------- 5. EXAMEN (ESTUDIANTE) ---------- -->
+    <!-- ---------- 6. EXAMEN (ESTUDIANTE) ---------- -->
     <section id="quizView" class="view hidden">
         <div class="quiz-container">
             <div class="quiz-header">
@@ -301,7 +394,7 @@
         </div>
     </section>
 
-    <!-- ---------- 6. RESULTADO ---------- -->
+    <!-- ---------- 7. RESULTADO ---------- -->
     <section id="resultView" class="view hidden">
         <div class="result-card">
             <div class="score-circle">
@@ -329,6 +422,7 @@
 <script src="js/supabaseClient.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/auth.js"></script>
+<script src="js/admin.js"></script>
 <script src="js/teacher.js"></script>
 <script src="js/quiz.js"></script>
 <script src="js/student.js"></script>
