@@ -836,3 +836,75 @@ footer {
 
 /* CEPRODENT 2.0 - Panel administrador */
 .admin-stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:1rem;margin-bottom:1.5rem}.admin-stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:1.1rem;display:flex;align-items:center;gap:1rem;box-shadow:var(--shadow-sm)}.admin-stat-card>i{font-size:1.45rem;color:var(--blue)}.admin-stat-card span{display:block;font-size:1.55rem;font-weight:700;color:var(--ink)}.admin-stat-card small{color:var(--muted);font-size:.8rem}.admin-modules-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem}.admin-module-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:1.5rem;text-align:left;cursor:pointer;transition:var(--transition);display:flex;flex-direction:column;gap:.55rem;color:var(--ink)}.admin-module-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:var(--blue)}.admin-module-card>i{font-size:1.6rem;color:var(--blue)}.admin-module-card strong{font-size:1.05rem}.admin-module-card span{font-size:.85rem;color:var(--muted)}.admin-back{margin-bottom:1rem}.admin-actions{display:flex;gap:.4rem;align-items:center}.btn-icon{border:1px solid var(--border);background:var(--surface);width:34px;height:34px;border-radius:8px;cursor:pointer;color:var(--blue)}.btn-icon.danger{color:#d14343}.status-inactive{font-size:.7rem;padding:2px 7px;border-radius:10px;background:#f1f1f1;color:#777;margin-left:5px}
+
+
+/* ============================================================================
+   CEPRODENT · Mejoras visuales y experiencia móvil
+   ============================================================================ */
+html, body { max-width: 100%; overflow-x: hidden; }
+img, svg, video, canvas { max-width: 100%; }
+
+/* Evita que textos largos rompan las tarjetas en pantallas pequeñas. */
+.eval-card, .admin-module-card, .admin-stat-card, .modal-card, .question-item { min-width: 0; }
+.eval-title, .eval-info, .admin-module-card strong, .admin-module-card span { overflow-wrap: anywhere; }
+
+/* Estado del módulo: contraste alto para distinguirlo inmediatamente. */
+.module-status { color: #fff; border: 1px solid transparent; box-shadow: 0 3px 10px rgba(11, 30, 61, 0.12); }
+.module-status i { color: #fff; font-size: 0.7rem; }
+.module-status-active { background: linear-gradient(135deg, #119b70, #16b981); }
+.module-status-inactive { background: linear-gradient(135deg, #d94148, #ef5960); }
+.module-inactive { opacity: 0.92; filter: saturate(0.78); }
+.module-inactive .eval-title { color: #475569; }
+
+/* Botón de activar/desactivar: se mantiene en el mismo lugar, pero ahora comunica
+   claramente la acción y tiene un área táctil más cómoda. */
+.module-toggle-btn {
+    width: auto; min-width: 104px; height: 42px; padding: 0 13px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    border-radius: 10px; font-size: 0.78rem; font-weight: 700;
+    transition: var(--transition);
+}
+.module-toggle-btn i { font-size: 1.35rem; }
+.module-toggle-active { color: #0f8a62; background: #ecfdf5; border-color: #86efc4; }
+.module-toggle-active:hover { color: #fff; background: #10b981; border-color: #10b981; transform: translateY(-1px); box-shadow: 0 6px 14px rgba(16, 185, 129, 0.22); }
+.module-toggle-inactive { color: #d9363e; background: #fff1f2; border-color: #fda4af; }
+.module-toggle-inactive:hover { color: #fff; background: #ef4444; border-color: #ef4444; transform: translateY(-1px); box-shadow: 0 6px 14px rgba(239, 68, 68, 0.20); }
+
+/* Contenedores con desplazamiento cuando el contenido es más ancho que la pantalla. */
+.table-responsive, .horizontal-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tabs { scrollbar-width: thin; padding-bottom: 2px; }
+.modal-overlay { padding: 1rem; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+@media (max-width: 768px) {
+    main { padding: 1.25rem 0.85rem 2rem; }
+    header { padding: 0.75rem 0.9rem; }
+    .navbar { gap: 0.65rem; }
+    .logo-icon { width: 38px; height: 38px; }
+    .logo-text h1 { font-size: 1.05rem; }
+    .user-nav-info { gap: 7px; }
+    .btn-logout { padding: 7px 10px; }
+    .cards-grid { grid-template-columns: 1fr; }
+    .admin-modules-grid { grid-template-columns: 1fr; }
+    .eval-card { padding: 1.15rem; }
+    .eval-card > div:first-child > div:first-child { align-items: flex-start !important; gap: 7px; flex-wrap: wrap; }
+    .card-actions { align-items: stretch; }
+    .card-actions .btn-primary { min-height: 42px; }
+    .module-toggle-btn { min-width: 110px; }
+    .modal-card { width: 100%; max-height: calc(100vh - 2rem); }
+    .question-item-header { flex-wrap: wrap; }
+}
+
+@media (max-width: 480px) {
+    .logo-text h1 { font-size: 0.95rem; }
+    .user-chip, .badge-role { display: none; }
+    .btn-logout span { display: none; }
+    .btn-logout { width: 38px; justify-content: center; padding: 7px; }
+    .auth-body { padding: 1.5rem 1rem; }
+    .auth-header { padding: 2rem 1rem 2.4rem; }
+    .admin-stats-grid { grid-template-columns: 1fr; }
+    .enroll-form .form-group { min-width: 100%; }
+    .options-grid { grid-template-columns: 1fr; }
+    .card-actions { flex-direction: column; }
+    .card-actions .btn-primary, .module-toggle-btn { width: 100%; min-width: 100%; }
+    .module-toggle-btn { height: 44px; }
+}
