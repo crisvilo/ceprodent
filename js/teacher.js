@@ -8,6 +8,8 @@
  * - Activación de evaluaciones.
  * - Creación e inscripción de estudiantes.
  * - Consulta de resultados.
+ * - Exportación de estudiantes y notas a Excel/PDF.
+ * - Activación/Desactivación de módulos completos.
  * ----------------------------------------------------------------------
  */
 
@@ -16,6 +18,7 @@ APP.teacher = {
     programs: [],
     currentModuleId: null,
     currentQuestionCount: 0,
+    reportExport: null, // para exportaciones
 };
 
 /* ============================== DASHBOARD ============================== */
@@ -43,6 +46,7 @@ async function fetchTeacherModulesData() {
             id,
             nombre,
             descripcion,
+            activo,
             created_at,
             programas ( id, nombre ),
             evaluaciones_activas ( activa ),
@@ -91,14 +95,21 @@ function renderTeacherModules() {
         const activa = extractActiva(m.evaluaciones_activas);
         const nPreguntas = m.banco_preguntas?.length || 0;
         const nEstudiantes = m.inscripciones?.length || 0;
+        const isActive = m.activo !== false; // por si es null
 
         return `
-            <div class="eval-card ${activa ? '' : 'is-inactive'}">
+            <div class="eval-card ${activa ? '' : 'is-inactive'} ${!isActive ? 'module-inactive' : ''}">
                 <div>
-                    <span class="eval-badge ${activa ? 'badge-active' : 'badge-inactive'}">
-                        <i class="fa-solid fa-circle"></i>
-                        ${activa ? 'Evaluación activa' : 'Inactiva'}
-                    </span>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <span class="eval-badge ${activa ? 'badge-active' : 'badge-inactive'}">
+                            <i class="fa-solid fa-circle"></i>
+                            ${activa ? 'Evaluación activa' : 'Inactiva'}
+                        </span>
+                        <span class="eval-badge ${isActive ? 'badge-active' : 'badge-inactive'}" style="background:${isActive ? '#10b981' : '#ef4444'}">
+                            <i class="fa-solid ${isActive ? 'fa-check-circle' : 'fa-times-circle'}"></i>
+                            ${isActive ? 'Módulo activo' : 'Módulo inactivo'}
+                        </span>
+                    </div>
 
                     <h3 class="eval-title">
                         ${escapeHTML(m.nombre)}
@@ -122,14 +133,23 @@ function renderTeacherModules() {
                     </div>
                 </div>
 
-                <div class="card-actions">
+                <div class="card-actions" style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
                     <button
                         class="btn-primary btn-compact"
-                        style="width:100%"
+                        style="flex:1; min-width:120px;"
                         onclick="openModuleDetail('${m.id}')"
                     >
                         <i class="fa-solid fa-gear"></i>
-                        Gestionar módulo
+                        Gestionar
+                    </button>
+
+                    <button
+                        class="btn-icon ${isActive ? 'btn-outline-success' : 'btn-outline-danger'}"
+                        title="${isActive ? 'Desactivar módulo' : 'Activar módulo'}"
+                        onclick="toggleModuleStatus('${m.id}')"
+                        style="padding:0 12px; border:1px solid ${isActive ? '#10b981' : '#ef4444'}; border-radius:6px;"
+                    >
+                        <i class="fa-solid ${isActive ? 'fa-toggle-on' : 'fa-toggle-off'}" style="color:${isActive ? '#10b981' : '#ef4444'}; font-size:1.4rem;"></i>
                     </button>
                 </div>
             </div>
@@ -151,6 +171,45 @@ function renderProgramaOptions() {
         ).join('');
 
     select.value = currentValue || '';
+}
+
+/* ============================== ACTIVAR/DESACTIVAR MÓDULO ============================== */
+
+async function toggleModuleStatus(moduloId) {
+    const modulo = APP.teacher.modules.find(m => m.id === moduloId);
+    if (!modulo) {
+        showToast('No se encontró el módulo.', 'error');
+        return;
+    }
+
+    const newState = !(modulo.activo !== false);
+    const action = newState ? 'activar' : 'desactivar';
+
+    if (!confirm(`¿${newState ? 'Activar' : 'Desactivar'} el módulo "${modulo.nombre}"?`)) {
+        return;
+    }
+
+    try {
+        const { error } = await db
+            .from('modulos')
+            .update({ activo: newState })
+            .eq('id', moduloId);
+
+        if (error) throw error;
+
+        showToast(`Módulo ${action}do correctamente.`, 'success');
+
+        // Si estamos viendo el detalle de este módulo y lo desactivamos, cerramos el detalle.
+        if (APP.teacher.currentModuleId === moduloId && !newState) {
+            backToModuleList();
+        } else {
+            await fetchTeacherModulesData();
+        }
+
+    } catch (error) {
+        console.error('Error al cambiar estado del módulo:', error);
+        showToast(friendlyError(error), 'error');
+    }
 }
 
 /* ============================== NUEVO MÓDULO ============================== */
@@ -219,7 +278,8 @@ async function handleCreateModule(event) {
                 programa_id: programaId,
                 docente_id: APP.user.id,
                 nombre,
-                descripcion: descripcion || null
+                descripcion: descripcion || null,
+                activo: true  // por defecto activo
             })
             .select('id')
             .single();
@@ -249,6 +309,13 @@ async function handleCreateModule(event) {
 /* ============================== DETALLE DEL MÓDULO ============================== */
 
 async function openModuleDetail(moduloId) {
+    // Verificar si el módulo está activo, si no, mostrar mensaje y no abrir
+    const modulo = APP.teacher.modules.find(m => m.id === moduloId);
+    if (modulo && modulo.activo === false) {
+        showToast('Este módulo está inactivo. Actívalo para gestionarlo.', 'error');
+        return;
+    }
+
     APP.teacher.currentModuleId = moduloId;
 
     activateTeacherTab('preguntas');
@@ -263,7 +330,8 @@ async function openModuleDetail(moduloId) {
         loadModuleHeader(moduloId),
         loadModuleQuestions(moduloId),
         loadModuleStudents(moduloId),
-        loadModuleResults(moduloId)
+        loadModuleResults(moduloId),
+        loadModuleGrades(moduloId)
     ]);
 }
 
@@ -615,61 +683,13 @@ async function loadModuleStudents(moduloId) {
             estudiantesPorId[estudiante.id] = estudiante;
         });
 
-        list.innerHTML = inscripciones.map(inscripcion => {
-            const estudiante =
-                estudiantesPorId[inscripcion.estudiante_id];
+        // Guardamos los estudiantes en APP.teacher para exportación
+        APP.teacher._currentStudents = inscripciones.map(inscripcion => {
+            const estudiante = estudiantesPorId[inscripcion.estudiante_id];
+            return estudiante ? { ...estudiante, inscripcion_id: inscripcion.id } : null;
+        }).filter(Boolean);
 
-            if (!estudiante) {
-                return `
-                    <div class="student-item">
-                        <div>
-                            <div class="s-name">
-                                Estudiante no disponible
-                            </div>
-                            <div class="s-email">
-                                No fue posible cargar su información.
-                            </div>
-                        </div>
-
-                        <button
-                            class="icon-btn"
-                            title="Quitar del módulo"
-                            onclick="handleUnenroll('${inscripcion.id}')"
-                        >
-                            <i class="fa-solid fa-user-minus"></i>
-                        </button>
-                    </div>
-                `;
-            }
-
-            const estado = estudiante.activo
-                ? ''
-                : ' <span class="badge-inactive">Inactivo</span>';
-
-            return `
-                <div class="student-item">
-                    <div>
-                        <div class="s-name">
-                            ${escapeHTML(estudiante.nombres || '')}
-                            ${escapeHTML(estudiante.apellidos || '')}
-                            ${estado}
-                        </div>
-
-                        <div class="s-email">
-                            ${escapeHTML(estudiante.email || '')}
-                        </div>
-                    </div>
-
-                    <button
-                        class="icon-btn"
-                        title="Quitar del módulo"
-                        onclick="handleUnenroll('${inscripcion.id}')"
-                    >
-                        <i class="fa-solid fa-user-minus"></i>
-                    </button>
-                </div>
-            `;
-        }).join('');
+        renderStudentList(APP.teacher._currentStudents);
 
     } catch (error) {
         console.error(
@@ -679,6 +699,102 @@ async function loadModuleStudents(moduloId) {
 
         list.innerHTML = '';
         showToast(friendlyError(error), 'error');
+    }
+}
+
+function renderStudentList(estudiantes) {
+    const list = document.getElementById('studentsList');
+
+    if (!estudiantes || estudiantes.length === 0) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <i class="fa-solid fa-user-plus"></i>
+                <h3>Sin estudiantes inscritos</h3>
+                <p>
+                    Puedes inscribir un estudiante existente o crear
+                    uno nuevo desde este módulo.
+                </p>
+            </div>
+        `;
+        return;
+    }
+
+    // Contenedor para botones de exportación
+    let html = `
+        <div class="export-actions" style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
+            <button class="btn-secondary btn-compact" id="btnExportStudentsExcel">
+                <i class="fa-solid fa-file-excel"></i> Exportar a Excel
+            </button>
+            <button class="btn-secondary btn-compact" id="btnExportStudentsPDF">
+                <i class="fa-solid fa-file-pdf"></i> Exportar a PDF
+            </button>
+        </div>
+        <div class="students-list">
+    `;
+
+    estudiantes.forEach(estudiante => {
+        const estado = estudiante.activo
+            ? ''
+            : ' <span class="badge-inactive">Inactivo</span>';
+
+        html += `
+            <div class="student-item">
+                <div>
+                    <div class="s-name">
+                        ${escapeHTML(estudiante.nombres || '')}
+                        ${escapeHTML(estudiante.apellidos || '')}
+                        ${estado}
+                    </div>
+
+                    <div class="s-email">
+                        ${escapeHTML(estudiante.email || '')}
+                    </div>
+                </div>
+
+                <button
+                    class="icon-btn"
+                    title="Quitar del módulo"
+                    onclick="handleUnenroll('${estudiante.inscripcion_id}')"
+                >
+                    <i class="fa-solid fa-user-minus"></i>
+                </button>
+            </div>
+        `;
+    });
+
+    html += `</div>`;
+    list.innerHTML = html;
+
+    // Asignar eventos a los botones de exportación
+    document.getElementById('btnExportStudentsExcel')
+        .addEventListener('click', () => exportTeacherStudents('excel'));
+
+    document.getElementById('btnExportStudentsPDF')
+        .addEventListener('click', () => exportTeacherStudents('pdf'));
+}
+
+// --- EXPORTACIÓN DE ESTUDIANTES ---
+function exportTeacherStudents(format) {
+    const students = APP.teacher._currentStudents || [];
+    if (!students.length) {
+        showToast('No hay estudiantes para exportar.', 'error');
+        return;
+    }
+
+    const data = students.map(s => ({
+        'Nombres': s.nombres || '',
+        'Apellidos': s.apellidos || '',
+        'Email': s.email || '',
+        'Estado': s.activo ? 'Activo' : 'Inactivo'
+    }));
+
+    const moduleName = document.getElementById('detailModuleName').textContent || 'Módulo';
+    const filename = `estudiantes_${moduleName.replace(/\s+/g, '_')}`;
+
+    if (format === 'excel') {
+        exportToExcel(data, filename);
+    } else {
+        exportToPDF(data, filename, `Lista de estudiantes - ${moduleName}`);
     }
 }
 
@@ -724,7 +840,13 @@ async function handleEnrollStudent(event) {
     event.preventDefault();
 
     const btn = document.getElementById('btnEnroll');
-    const email = document.getElementById('enrollEmail').value.trim();
+
+    // Normalizamos el correo para evitar problemas con mayúsculas y espacios.
+    const email = document.getElementById('enrollEmail')
+        .value
+        .trim()
+        .toLowerCase();
+
     const moduloId = APP.teacher.currentModuleId;
 
     if (!email) {
@@ -735,52 +857,89 @@ async function handleEnrollStudent(event) {
     setButtonLoading(btn, true, 'Buscando...');
 
     try {
-        // Verificamos que el docente esté trabajando sobre uno de sus módulos.
+        // Validamos el módulo y obtenemos su programa.
         const programaId =
             await getCurrentModuleProgramId(moduloId);
 
-        const { data: estudiantes, error: buscarError } = await db
-            .rpc('buscar_estudiante_por_email', {
-                p_email: email
-            });
+        /*
+         * Buscamos directamente en usuarios.
+         *
+         * Esto permite reconocer tanto los estudiantes creados
+         * por el docente como los estudiantes que se registraron
+         * desde la pantalla de inicio de sesión.
+         */
+        const { data: estudiante, error: buscarError } = await db
+            .from('usuarios')
+            .select('id, nombres, apellidos, email, rol, activo')
+            .ilike('email', email)
+            .maybeSingle();
 
         if (buscarError) throw buscarError;
 
-        // El estudiante no existe: mostramos el formulario de creación.
-        if (!estudiantes || !estudiantes.length) {
+        // No existe ningún usuario con ese correo.
+        if (!estudiante) {
             showCreateStudentInline(email);
             return;
         }
 
-        const estudiante = estudiantes[0];
+        // Existe el usuario, pero no es estudiante.
+        if (estudiante.rol !== 'estudiante') {
+            throw new Error(
+                'El correo ingresado pertenece a un usuario que no tiene el rol de estudiante.'
+            );
+        }
 
-        // Verificar que el estudiante pertenece al mismo programa del módulo.
+        // Validamos que tenga su perfil académico de estudiante.
         const { data: perfilEstudiante, error: perfilError } = await db
             .from('estudiantes')
             .select('usuario_id, programa_id, activo')
             .eq('usuario_id', estudiante.id)
-            .single();
+            .maybeSingle();
 
         if (perfilError) throw perfilError;
 
         if (!perfilEstudiante) {
             throw new Error(
-                'El usuario encontrado no tiene un perfil de estudiante.'
+                'El usuario está registrado, pero no tiene un perfil académico de estudiante.'
             );
         }
 
-        if (perfilEstudiante.activo === false) {
+        if (estudiante.activo === false ||
+            perfilEstudiante.activo === false) {
+
             throw new Error(
                 'Este estudiante se encuentra inactivo.'
             );
         }
 
+        /*
+         * El estudiante debe pertenecer al mismo programa
+         * académico del módulo.
+         */
         if (perfilEstudiante.programa_id !== programaId) {
             throw new Error(
                 'El estudiante pertenece a un programa diferente y no puede ser inscrito en este módulo.'
             );
         }
 
+        // Verificamos primero si ya está inscrito.
+        const { data: inscripcionExistente, error: verificarError } =
+            await db
+                .from('inscripciones')
+                .select('id')
+                .eq('estudiante_id', estudiante.id)
+                .eq('modulo_id', moduloId)
+                .maybeSingle();
+
+        if (verificarError) throw verificarError;
+
+        if (inscripcionExistente) {
+            throw new Error(
+                'Ese estudiante ya está inscrito en este módulo.'
+            );
+        }
+
+        // Inscribimos al estudiante.
         const { error: insertError } = await db
             .from('inscripciones')
             .insert({
@@ -788,24 +947,13 @@ async function handleEnrollStudent(event) {
                 modulo_id: moduloId
             });
 
-        if (insertError) {
-            if (
-                insertError.message?.toLowerCase().includes('duplicate') ||
-                insertError.code === '23505'
-            ) {
-                throw new Error(
-                    'Ese estudiante ya está inscrito en este módulo.'
-                );
-            }
-
-            throw insertError;
-        }
+        if (insertError) throw insertError;
 
         document.getElementById('enrollForm').reset();
         hideCreateStudentInline();
 
         showToast(
-            'Estudiante inscrito correctamente.',
+            `${estudiante.nombres || 'El estudiante'} fue inscrito correctamente en el módulo.`,
             'success'
         );
 
@@ -1063,7 +1211,8 @@ function activateTeacherTab(tabName) {
     const panels = {
         preguntas: document.getElementById('tabPanelPreguntas'),
         estudiantes: document.getElementById('tabPanelEstudiantes'),
-        resultados: document.getElementById('tabPanelResultados')
+        resultados: document.getElementById('tabPanelResultados'),
+        notas: document.getElementById('tabPanelNotas')
     };
 
     Object.entries(panels).forEach(([name, panel]) => {
@@ -1073,28 +1222,447 @@ function activateTeacherTab(tabName) {
     });
 }
 
-function initTeacherTabs() {
-    const tabsContainer = document.querySelector('#moduleDetailPanel .tabs');
+/* ============================== NOTAS DEL MÓDULO ============================== */
 
-    if (!tabsContainer) return;
+/**
+ * Carga las notas finales de los estudiantes inscritos en el módulo actual.
+ * La función SQL obtener_notas_finales calcula el promedio y la nota final.
+ */
+async function loadModuleGrades(moduloId) {
+    const list = document.getElementById('moduleGradesList');
 
-    // Evita registrar los eventos más de una vez.
-    if (tabsContainer.dataset.initialized === 'true') return;
+    if (!list) return;
 
-    tabsContainer.dataset.initialized = 'true';
+    list.innerHTML = `
+        <div class="loading-inline">
+            <i class="fa-solid fa-spinner"></i>
+            Cargando calificaciones...
+        </div>
+    `;
 
-    tabsContainer.querySelectorAll('.tab-btn').forEach(button => {
-        button.addEventListener('click', () => {
-            const tabName = button.dataset.tab;
+    try {
+        /*
+         * Se consulta la función existente. Luego filtramos únicamente
+         * el módulo que el docente está visualizando.
+         */
+        const { data, error } = await db
+            .rpc('obtener_notas_finales');
 
-            activateTeacherTab(tabName);
-        });
-    });
+        if (error) throw error;
+
+        const notas = (data || []).filter(
+            nota => nota.modulo_id === moduloId
+        );
+
+        renderModuleGrades(notas);
+
+    } catch (error) {
+        console.error('Error al cargar notas:', error);
+
+        list.innerHTML = '';
+
+        showToast(
+            friendlyError(error),
+            'error',
+            6000
+        );
+    }
 }
 
 
+/**
+ * Muestra la tabla de calificaciones y los botones de exportación.
+ */
+function renderModuleGrades(notas) {
+    const list = document.getElementById('moduleGradesList');
 
-/* ============================== INIT / EVENTOS ============================== */
+    if (!notas || notas.length === 0) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <i class="fa-solid fa-graduation-cap"></i>
+                <h3>Sin estudiantes para calificar</h3>
+                <p>
+                    Los estudiantes inscritos en este módulo aparecerán aquí.
+                </p>
+            </div>
+        `;
+        return;
+    }
+
+    // Guardar las notas en APP.teacher para exportación
+    APP.teacher._currentGrades = notas;
+
+    let html = `
+        <div class="export-actions" style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
+            <button class="btn-secondary btn-compact" id="btnExportGradesExcel">
+                <i class="fa-solid fa-file-excel"></i> Exportar notas a Excel
+            </button>
+            <button class="btn-secondary btn-compact" id="btnExportGradesPDF">
+                <i class="fa-solid fa-file-pdf"></i> Exportar notas a PDF
+            </button>
+        </div>
+        <div style="overflow-x:auto">
+            <table class="grades-table" style="width:100%; border-collapse:collapse">
+                <thead>
+                    <tr>
+                        <th style="text-align:left; padding:12px">
+                            Estudiante
+                        </th>
+                        <th style="text-align:center; padding:12px">
+                            Promedio evaluaciones
+                        </th>
+                        <th style="text-align:center; padding:12px">
+                            Nota adicional 1
+                        </th>
+                        <th style="text-align:center; padding:12px">
+                            Nota adicional 2
+                        </th>
+                        <th style="text-align:center; padding:12px">
+                            Nota final
+                        </th>
+                        <th style="text-align:center; padding:12px">
+                            Acción
+                        </th>
+                    </tr>
+                </thead>
+
+                <tbody>
+    `;
+
+    notas.forEach(nota => {
+        html += `
+            <tr>
+                <td style="padding:12px">
+                    <strong>
+                        ${escapeHTML(
+                            nota.estudiante_nombre || 'Estudiante'
+                        )}
+                    </strong>
+                </td>
+
+                <td style="text-align:center; padding:12px">
+                    ${formatGrade(nota.promedio_evaluaciones)}
+                </td>
+
+                <td style="text-align:center; padding:12px">
+                    <input
+                        type="number"
+                        min="0"
+                        max="5"
+                        step="0.1"
+                        class="form-control grade-input"
+                        id="nota1_${nota.estudiante_id}"
+                        value="${nota.nota_adicional_1 ?? ''}"
+                        placeholder="0.0"
+                    >
+                </td>
+
+                <td style="text-align:center; padding:12px">
+                    <input
+                        type="number"
+                        min="0"
+                        max="5"
+                        step="0.1"
+                        class="form-control grade-input"
+                        id="nota2_${nota.estudiante_id}"
+                        value="${nota.nota_adicional_2 ?? ''}"
+                        placeholder="0.0"
+                    >
+                </td>
+
+                <td style="text-align:center; padding:12px">
+                    <strong>
+                        ${formatGrade(nota.nota_final)}
+                    </strong>
+                </td>
+
+                <td style="text-align:center; padding:12px">
+                    <button
+                        class="btn-primary btn-compact"
+                        type="button"
+                        onclick="saveAdditionalGrades(
+                            '${nota.estudiante_id}',
+                            '${nota.modulo_id}'
+                        )"
+                    >
+                        <i class="fa-solid fa-floppy-disk"></i>
+                        Guardar
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    list.innerHTML = html;
+
+    // Asignar eventos a los botones de exportación
+    document.getElementById('btnExportGradesExcel')
+        .addEventListener('click', () => exportTeacherGrades('excel'));
+
+    document.getElementById('btnExportGradesPDF')
+        .addEventListener('click', () => exportTeacherGrades('pdf'));
+}
+
+// --- EXPORTACIÓN DE NOTAS ---
+function exportTeacherGrades(format) {
+    const grades = APP.teacher._currentGrades || [];
+    if (!grades.length) {
+        showToast('No hay notas para exportar.', 'error');
+        return;
+    }
+
+    const data = grades.map(g => ({
+        'Estudiante': g.estudiante_nombre || 'N/A',
+        'Promedio evaluaciones': formatGrade(g.promedio_evaluaciones),
+        'Nota adicional 1': formatGrade(g.nota_adicional_1),
+        'Nota adicional 2': formatGrade(g.nota_adicional_2),
+        'Nota final': formatGrade(g.nota_final)
+    }));
+
+    const moduleName = document.getElementById('detailModuleName').textContent || 'Módulo';
+    const filename = `notas_${moduleName.replace(/\s+/g, '_')}`;
+
+    if (format === 'excel') {
+        exportToExcel(data, filename);
+    } else {
+        exportToPDF(data, filename, `Notas del módulo - ${moduleName}`);
+    }
+}
+
+
+/**
+ * Guarda o actualiza las dos notas adicionales.
+ */
+async function saveAdditionalGrades(estudianteId, moduloId) {
+    const inputNota1 =
+        document.getElementById(`nota1_${estudianteId}`);
+
+    const inputNota2 =
+        document.getElementById(`nota2_${estudianteId}`);
+
+    const nota1 = inputNota1.value === ''
+        ? null
+        : Number(inputNota1.value);
+
+    const nota2 = inputNota2.value === ''
+        ? null
+        : Number(inputNota2.value);
+
+    /*
+     * Validación de notas.
+     * Actualmente el sistema trabaja con escala de 0 a 5.
+     */
+    if (
+        (nota1 !== null && (nota1 < 0 || nota1 > 5)) ||
+        (nota2 !== null && (nota2 < 0 || nota2 > 5))
+    ) {
+        showToast(
+            'Las notas deben estar entre 0.0 y 5.0.',
+            'error'
+        );
+        return;
+    }
+
+    try {
+        /*
+         * upsert permite crear las notas por primera vez o actualizarlas
+         * si el docente las modifica posteriormente.
+         *
+         * Requiere una restricción única en estudiante_id + modulo_id,
+         * que corresponde a la estructura de CEPRODENT 2.0.
+         */
+        const { error } = await db
+            .from('notas_adicionales')
+            .upsert(
+                {
+                    estudiante_id: estudianteId,
+                    modulo_id: moduloId,
+                    nota_1: nota1,
+                    nota_2: nota2
+                },
+                {
+                    onConflict: 'estudiante_id,modulo_id'
+                }
+            );
+
+        if (error) throw error;
+
+        showToast(
+            'Notas adicionales guardadas correctamente.',
+            'success'
+        );
+
+        await loadModuleGrades(moduloId);
+
+    } catch (error) {
+        console.error('Error al guardar notas:', error);
+
+        showToast(
+            friendlyError(error),
+            'error',
+            6000
+        );
+    }
+}
+
+
+/**
+ * Formatea una calificación para mostrarla en pantalla.
+ */
+function formatGrade(value) {
+    if (
+        value === null ||
+        value === undefined ||
+        value === ''
+    ) {
+        return '—';
+    }
+
+    return Number(value).toFixed(1);
+}
+
+
+/* ============================== FUNCIONES DE EXPORTACIÓN (Excel / PDF) ============================== */
+
+/**
+ * Exporta datos a formato CSV (Excel) y descarga el archivo.
+ * @param {Array<Object>} data - Array de objetos con los datos a exportar.
+ * @param {string} filename - Nombre del archivo (sin extensión).
+ */
+function exportToExcel(data, filename) {
+    if (!data || !data.length) {
+        showToast('No hay datos para exportar.', 'error');
+        return;
+    }
+
+    const headers = Object.keys(data[0]);
+
+    const escapeCell = value => {
+        const text = String(value ?? '').replace(/"/g, '""');
+        return `"${text}"`;
+    };
+
+    const csv = [
+        headers.map(escapeCell).join(';'),
+        ...data.map(row =>
+            headers
+                .map(header => escapeCell(row[header]))
+                .join(';')
+        ),
+    ].join('\r\n');
+
+    const blob = new Blob(
+        ['\uFEFF' + csv],
+        { type: 'text/csv;charset=utf-8;' }
+    );
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${filename}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+/**
+ * Exporta datos a PDF utilizando la ventana de impresión.
+ * @param {Array<Object>} data - Array de objetos con los datos a exportar.
+ * @param {string} filename - Nombre del archivo (sin extensión).
+ * @param {string} title - Título del reporte.
+ */
+function exportToPDF(data, filename, title) {
+    if (!data || !data.length) {
+        showToast('No hay datos para exportar.', 'error');
+        return;
+    }
+
+    const headers = Object.keys(data[0]);
+
+    const html = `
+        <html>
+            <head>
+                <meta charset="utf-8">
+                <title>${escapeHTML(title)}</title>
+                <style>
+                    body {
+                        font-family: Arial, Helvetica, sans-serif;
+                        padding: 24px;
+                        color: #1f2937;
+                    }
+                    h1 { font-size: 18px; margin-bottom: 4px; }
+                    p.meta { font-size: 12px; color: #6b7280; }
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-top: 16px;
+                        font-size: 12px;
+                    }
+                    th, td {
+                        border: 1px solid #d1d5db;
+                        padding: 6px 8px;
+                        text-align: left;
+                    }
+                    th { background: #f3f4f6; }
+                </style>
+            </head>
+            <body>
+                <h1>${escapeHTML(title)}</h1>
+                <p class="meta">
+                    CEPRODENT &middot;
+                    ${escapeHTML(new Date().toLocaleString())} &middot;
+                    ${data.length} registro(s)
+                </p>
+                <table>
+                    <thead>
+                        <tr>
+                            ${headers
+                                .map(header => `<th>${escapeHTML(header)}</th>`)
+                                .join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data
+                            .map(row => `
+                                <tr>
+                                    ${headers
+                                        .map(header =>
+                                            `<td>${escapeHTML(
+                                                String(row[header] ?? '')
+                                            )}</td>`
+                                        )
+                                        .join('')}
+                                </tr>
+                            `)
+                            .join('')}
+                    </tbody>
+                </table>
+            </body>
+        </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+        showToast(
+            'Permite las ventanas emergentes para exportar el PDF.',
+            'error'
+        );
+        return;
+    }
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 400);
+}
+
 
 /* ============================== INIT / EVENTOS ============================== */
 
@@ -1116,4 +1684,22 @@ function initTeacherModule() {
 
     document.getElementById('createStudentForm')
         .addEventListener('submit', handleCreateStudentInline);
+}
+
+function initTeacherTabs() {
+    const tabsContainer = document.querySelector('#moduleDetailPanel .tabs');
+
+    if (!tabsContainer) return;
+
+    // Evita registrar los eventos más de una vez.
+    if (tabsContainer.dataset.initialized === 'true') return;
+
+    tabsContainer.dataset.initialized = 'true';
+
+    tabsContainer.querySelectorAll('.tab-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            const tabName = button.dataset.tab;
+            activateTeacherTab(tabName);
+        });
+    });
 }

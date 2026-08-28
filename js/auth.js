@@ -36,6 +36,37 @@ async function initAuth() {
 }
 
 
+const btnShowRegister =
+    document.getElementById('btnShowRegister');
+
+const btnBackToLogin =
+    document.getElementById('btnBackToLogin');
+
+const registerForm =
+    document.getElementById('registerForm');
+
+if (btnShowRegister) {
+    btnShowRegister.addEventListener(
+        'click',
+        showRegisterForm
+    );
+}
+
+if (btnBackToLogin) {
+    btnBackToLogin.addEventListener(
+        'click',
+        showLoginForm
+    );
+}
+
+if (registerForm) {
+    registerForm.addEventListener(
+        'submit',
+        handleRegister
+    );
+}
+
+
 function showAuthScreen() {
     document.getElementById('mainHeader').classList.add('hidden');
     document.getElementById('userNav').classList.add('hidden');
@@ -217,4 +248,225 @@ async function handleLogin(event) {
 async function handleLogout() {
     await db.auth.signOut();
     showToast('Sesión cerrada.', 'info', 2500);
+}
+
+
+/* ============================== REGISTRO DE ESTUDIANTES ============================== */
+
+/**
+ * Muestra el formulario de registro y carga los programas disponibles.
+ */
+async function showRegisterForm() {
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+
+    loginForm.classList.add('hidden');
+    registerForm.classList.remove('hidden');
+
+    await loadRegisterPrograms();
+}
+
+
+/**
+ * Regresa al formulario de inicio de sesión.
+ */
+function showLoginForm() {
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+
+    registerForm.classList.add('hidden');
+    loginForm.classList.remove('hidden');
+
+    registerForm.reset();
+}
+
+
+/**
+ * Carga los programas académicos para el registro del estudiante.
+ */
+async function loadRegisterPrograms() {
+    const select = document.getElementById('registerPrograma');
+
+    if (!select) return;
+
+    select.innerHTML = `
+        <option value="">
+            Cargando programas...
+        </option>
+    `;
+
+    try {
+        const { data, error } = await db
+            .from('programas')
+            .select('id, nombre')
+            .eq('activo', true)
+            .order('nombre');
+
+        if (error) throw error;
+
+        select.innerHTML = `
+            <option value="">
+                — Selecciona tu programa —
+            </option>
+        `;
+
+        (data || []).forEach(programa => {
+            const option = document.createElement('option');
+
+            option.value = programa.id;
+            option.textContent = programa.nombre;
+
+            select.appendChild(option);
+        });
+
+        if (!data || data.length === 0) {
+            select.innerHTML = `
+                <option value="">
+                    No hay programas disponibles
+                </option>
+            `;
+        }
+
+    } catch (error) {
+        console.error(
+            'Error al cargar programas:',
+            error
+        );
+
+        select.innerHTML = `
+            <option value="">
+                Error al cargar programas
+            </option>
+        `;
+
+        showToast(
+            'No fue posible cargar los programas académicos.',
+            'error'
+        );
+    }
+}
+
+
+/**
+ * Registra un nuevo estudiante.
+ *
+ * El rol siempre se envía como "estudiante".
+ * El usuario nunca puede elegir ni modificar su propio rol.
+ */
+async function handleRegister(event) {
+    event.preventDefault();
+
+    const btn =
+        document.getElementById('btnRegister');
+
+    const nombres =
+        document.getElementById('registerNombres')
+            .value
+            .trim();
+
+    const apellidos =
+        document.getElementById('registerApellidos')
+            .value
+            .trim();
+
+    const programaId =
+        document.getElementById('registerPrograma')
+            .value;
+
+    const email =
+        document.getElementById('registerEmail')
+            .value
+            .trim()
+            .toLowerCase();
+
+    const password =
+        document.getElementById('registerPassword')
+            .value;
+
+    const passwordConfirm =
+        document.getElementById('registerPasswordConfirm')
+            .value;
+
+    if (!nombres || !apellidos || !programaId || !email || !password) {
+        showToast(
+            'Completa todos los campos del registro.',
+            'error'
+        );
+        return;
+    }
+
+    if (password.length < 6) {
+        showToast(
+            'La contraseña debe tener al menos 6 caracteres.',
+            'error'
+        );
+        return;
+    }
+
+    if (password !== passwordConfirm) {
+        showToast(
+            'Las contraseñas no coinciden.',
+            'error'
+        );
+        return;
+    }
+
+    setButtonLoading(
+        btn,
+        true,
+        'Creando cuenta...'
+    );
+
+    try {
+        /*
+         * Usamos una Edge Function específica para registro público.
+         * El rol se establece en el servidor como "estudiante".
+         */
+        const { data, error } =
+            await db.functions.invoke(
+                'register-student',
+                {
+                    body: {
+                        nombres,
+                        apellidos,
+                        email,
+                        password,
+                        programa_id: programaId
+                    }
+                }
+            );
+
+        if (error) {
+            throw error;
+        }
+
+        if (data?.error) {
+            throw new Error(data.error);
+        }
+
+        showToast(
+            '¡Cuenta creada correctamente! Ya puedes iniciar sesión.',
+            'success',
+            5000
+        );
+
+        showLoginForm();
+
+        document.getElementById('email').value = email;
+
+    } catch (error) {
+        console.error(
+            'Error al registrar estudiante:',
+            error
+        );
+
+        showToast(
+            friendlyError(error),
+            'error',
+            7000
+        );
+
+    } finally {
+        setButtonLoading(btn, false);
+    }
 }

@@ -7,6 +7,8 @@
  * - Muestra el programa y docente responsable.
  * - Permite presentar evaluaciones activas.
  * - Muestra el historial de calificaciones.
+ * - Muestra las notas finales por módulo.
+ * - Permite exportar historial y notas a Excel y PDF.
  * - Se actualiza cuando el docente activa o desactiva una evaluación.
  * ----------------------------------------------------------------------
  */
@@ -14,7 +16,10 @@
 APP.student = {
     modules: [],
     resultsByModule: {},
-    realtimeChannel: null
+    grades: [],
+    realtimeChannel: null,
+    _exportResults: [],   // para exportación
+    _exportGrades: []     // para exportación
 };
 
 /* ============================== DASHBOARD ============================== */
@@ -37,8 +42,6 @@ async function loadStudentDashboard() {
     try {
         /*
          * Primero obtenemos las inscripciones del estudiante.
-         * Se hace una consulta separada para evitar problemas con
-         * relaciones anidadas después de la migración a CEPRODENT 2.0.
          */
         const { data: inscripciones, error: errInsc } = await db
             .from('inscripciones')
@@ -50,6 +53,7 @@ async function loadStudentDashboard() {
         if (!inscripciones || inscripciones.length === 0) {
             APP.student.modules = [];
             APP.student.resultsByModule = {};
+            APP.student.grades = [];
 
             grid.innerHTML = '';
 
@@ -58,6 +62,7 @@ async function loadStudentDashboard() {
             }
 
             renderStudentResults([]);
+            renderStudentGrades([]);
             unsubscribeStudentRealtime();
             return;
         }
@@ -67,8 +72,7 @@ async function loadStudentDashboard() {
         );
 
         /*
-         * Obtenemos los módulos directamente.
-         * Esto evita depender de una relación antigua o ambigua.
+         * Obtener los módulos.
          */
         const { data: modules, error: errModules } = await db
             .from('modulos')
@@ -133,7 +137,6 @@ async function loadStudentDashboard() {
 
         /*
          * Construir los módulos que verá el estudiante.
-         * Los módulos inactivos no se muestran.
          */
         APP.student.modules = (modules || [])
             .filter(modulo => modulo.activo !== false)
@@ -165,7 +168,10 @@ async function loadStudentDashboard() {
             .order('created_at', { ascending: false });
 
         if (errRes) {
-            console.error('Error al cargar resultados:', errRes);
+            console.error(
+                'Error al cargar resultados:',
+                errRes
+            );
         }
 
         /*
@@ -179,6 +185,11 @@ async function loadStudentDashboard() {
                     resultado;
             }
         });
+
+        /*
+         * Cargar las notas finales.
+         */
+        await loadStudentGrades();
 
         renderStudentModules();
         renderStudentResults(resultados || [], errRes);
@@ -333,7 +344,7 @@ function renderStudentModules() {
     }).join('');
 }
 
-/* ============================== RESULTADOS ============================== */
+/* ============================== RESULTADOS (HISTORIAL) ============================== */
 
 function renderStudentResults(resultados, error) {
     const list = document.getElementById('studentResultsList');
@@ -358,41 +369,346 @@ function renderStudentResults(resultados, error) {
         return;
     }
 
-    const modulesPorId = {};
+    // Guardar datos para exportación
+    APP.student._exportResults = resultados.map(r => {
+        const modulo = (APP.student.modules || []).find(m => m.id === r.modulo_id);
+        return {
+            'Módulo': modulo?.nombre || 'Módulo',
+            'Calificación': Number(r.calificacion).toFixed(1),
+            'Correctas': r.respuestas_correctas || 0,
+            'Total preguntas': r.total_preguntas || 0,
+            'Fecha': formatDate(r.created_at) || ''
+        };
+    });
 
+    // Construir HTML con botones de exportación
+    let html = `
+        <div class="export-actions" style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
+            <button class="btn-secondary btn-compact" id="btnExportResultsExcel">
+                <i class="fa-solid fa-file-excel"></i> Exportar historial a Excel
+            </button>
+            <button class="btn-secondary btn-compact" id="btnExportResultsPDF">
+                <i class="fa-solid fa-file-pdf"></i> Exportar historial a PDF
+            </button>
+        </div>
+        <div class="results-list">
+    `;
+
+    const modulesPorId = {};
     (APP.student.modules || []).forEach(modulo => {
         modulesPorId[modulo.id] = modulo;
     });
 
-    list.innerHTML = resultados.map(resultado => {
-        const modulo =
-            modulesPorId[resultado.modulo_id];
-
-        return `
+    resultados.forEach(resultado => {
+        const modulo = modulesPorId[resultado.modulo_id];
+        html += `
             <div class="result-item">
                 <div class="r-main">
                     <strong>
-                        ${escapeHTML(
-                            modulo?.nombre || 'Módulo'
-                        )}
+                        ${escapeHTML(modulo?.nombre || 'Módulo')}
                     </strong>
-
                     <span class="r-meta">
-                        ${resultado.respuestas_correctas || 0}/${
-                            resultado.total_preguntas || 0
-                        } correctas ·
+                        ${resultado.respuestas_correctas || 0}/${resultado.total_preguntas || 0} correctas ·
                         ${formatDate(resultado.created_at)}
                     </span>
                 </div>
-
-                <span class="result-score ${
-                    scoreClass(resultado.calificacion)
-                }">
+                <span class="result-score ${scoreClass(resultado.calificacion)}">
                     ${Number(resultado.calificacion).toFixed(1)}
                 </span>
             </div>
         `;
-    }).join('');
+    });
+
+    html += `</div>`;
+    list.innerHTML = html;
+
+    // Asignar eventos a los botones
+    document.getElementById('btnExportResultsExcel')
+        .addEventListener('click', () => exportStudentResults('excel'));
+
+    document.getElementById('btnExportResultsPDF')
+        .addEventListener('click', () => exportStudentResults('pdf'));
+}
+
+/* ============================== NOTAS FINALES ============================== */
+
+/**
+ * Obtiene las notas finales exclusivamente del estudiante
+ * que tiene la sesión activa.
+ */
+async function loadStudentGrades() {
+    const list = document.getElementById('studentGradesList');
+
+    if (!list) return;
+
+    list.innerHTML = `
+        <div class="loading-inline">
+            <i class="fa-solid fa-spinner"></i>
+            Cargando tus notas...
+        </div>
+    `;
+
+    try {
+        const { data, error } = await db
+            .rpc(
+                'obtener_notas_finales',
+                {
+                    p_estudiante_id: APP.user.id
+                }
+            );
+
+        if (error) throw error;
+
+        APP.student.grades = data || [];
+
+        renderStudentGrades(APP.student.grades);
+
+    } catch (error) {
+        console.error(
+            'Error al cargar las notas finales:',
+            error
+        );
+
+        list.innerHTML = `
+            <p class="text-muted">
+                No fue posible cargar tus notas finales.
+            </p>
+        `;
+    }
+}
+
+/**
+ * Muestra las notas organizadas por módulo con botones de exportación.
+ */
+function renderStudentGrades(notas) {
+    const list = document.getElementById('studentGradesList');
+
+    if (!list) return;
+
+    if (!notas || notas.length === 0) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <i class="fa-solid fa-graduation-cap"></i>
+                <h3>Aún no tienes calificaciones finales</h3>
+                <p>
+                    Tus notas aparecerán aquí cuando tengas módulos
+                    inscritos y evaluaciones registradas.
+                </p>
+            </div>
+        `;
+        return;
+    }
+
+    // Guardar datos para exportación
+    APP.student._exportGrades = notas.map(nota => ({
+        'Módulo': nota.modulo_nombre || 'Módulo',
+        'Promedio evaluaciones': formatStudentGrade(nota.promedio_evaluaciones),
+        'Nota adicional 1': formatStudentGrade(nota.nota_adicional_1),
+        'Nota adicional 2': formatStudentGrade(nota.nota_adicional_2),
+        'Nota final': formatStudentGrade(nota.nota_final)
+    }));
+
+    let html = `
+        <div class="export-actions" style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
+            <button class="btn-secondary btn-compact" id="btnExportGradesExcel">
+                <i class="fa-solid fa-file-excel"></i> Exportar notas a Excel
+            </button>
+            <button class="btn-secondary btn-compact" id="btnExportGradesPDF">
+                <i class="fa-solid fa-file-pdf"></i> Exportar notas a PDF
+            </button>
+        </div>
+        <div style="overflow-x:auto">
+            <table class="grades-table" style="width:100%; border-collapse:collapse">
+                <thead>
+                    <tr>
+                        <th style="text-align:left; padding:12px">Módulo</th>
+                        <th style="text-align:center; padding:12px">Promedio evaluaciones</th>
+                        <th style="text-align:center; padding:12px">Nota adicional 1</th>
+                        <th style="text-align:center; padding:12px">Nota adicional 2</th>
+                        <th style="text-align:center; padding:12px">Nota final</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    notas.forEach(nota => {
+        html += `
+            <tr>
+                <td style="padding:12px"><strong>${escapeHTML(nota.modulo_nombre || 'Módulo')}</strong></td>
+                <td style="text-align:center; padding:12px">${formatStudentGrade(nota.promedio_evaluaciones)}</td>
+                <td style="text-align:center; padding:12px">${formatStudentGrade(nota.nota_adicional_1)}</td>
+                <td style="text-align:center; padding:12px">${formatStudentGrade(nota.nota_adicional_2)}</td>
+                <td style="text-align:center; padding:12px"><strong>${formatStudentGrade(nota.nota_final)}</strong></td>
+            </tr>
+        `;
+    });
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    list.innerHTML = html;
+
+    // Asignar eventos a los botones
+    document.getElementById('btnExportGradesExcel')
+        .addEventListener('click', () => exportStudentGrades('excel'));
+
+    document.getElementById('btnExportGradesPDF')
+        .addEventListener('click', () => exportStudentGrades('pdf'));
+}
+
+/**
+ * Formatea una calificación.
+ */
+function formatStudentGrade(value) {
+    if (value === null || value === undefined || value === '') {
+        return '—';
+    }
+    return Number(value).toFixed(1);
+}
+
+/* ============================== EXPORTACIONES DEL ESTUDIANTE ============================== */
+
+/**
+ * Exporta el historial de calificaciones.
+ */
+function exportStudentResults(format) {
+    const data = APP.student._exportResults;
+    if (!data || data.length === 0) {
+        showToast('No hay datos para exportar.', 'error');
+        return;
+    }
+    const filename = `mi_historial_${new Date().toISOString().slice(0,10)}`;
+    if (format === 'excel') {
+        exportToExcel(data, filename);
+    } else {
+        exportToPDF(data, filename, 'Mi historial de calificaciones');
+    }
+}
+
+/**
+ * Exporta las notas finales.
+ */
+function exportStudentGrades(format) {
+    const data = APP.student._exportGrades;
+    if (!data || data.length === 0) {
+        showToast('No hay datos para exportar.', 'error');
+        return;
+    }
+    const filename = `mis_notas_${new Date().toISOString().slice(0,10)}`;
+    if (format === 'excel') {
+        exportToExcel(data, filename);
+    } else {
+        exportToPDF(data, filename, 'Mis notas finales');
+    }
+}
+
+/* ============================== FUNCIONES DE EXPORTACIÓN (Excel / PDF) ============================== */
+
+/**
+ * Exporta datos a formato CSV (Excel) y descarga el archivo.
+ * @param {Array<Object>} data - Array de objetos con los datos a exportar.
+ * @param {string} filename - Nombre del archivo (sin extensión).
+ */
+function exportToExcel(data, filename) {
+    if (!data || !data.length) {
+        showToast('No hay datos para exportar.', 'error');
+        return;
+    }
+
+    const headers = Object.keys(data[0]);
+
+    const escapeCell = value => {
+        const text = String(value ?? '').replace(/"/g, '""');
+        return `"${text}"`;
+    };
+
+    const csv = [
+        headers.map(escapeCell).join(';'),
+        ...data.map(row =>
+            headers
+                .map(header => escapeCell(row[header]))
+                .join(';')
+        ),
+    ].join('\r\n');
+
+    const blob = new Blob(
+        ['\uFEFF' + csv],
+        { type: 'text/csv;charset=utf-8;' }
+    );
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${filename}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+/**
+ * Exporta datos a PDF utilizando la ventana de impresión.
+ * @param {Array<Object>} data - Array de objetos con los datos a exportar.
+ * @param {string} filename - Nombre del archivo (sin extensión).
+ * @param {string} title - Título del reporte.
+ */
+function exportToPDF(data, filename, title) {
+    if (!data || !data.length) {
+        showToast('No hay datos para exportar.', 'error');
+        return;
+    }
+
+    const headers = Object.keys(data[0]);
+
+    const html = `
+        <html>
+            <head>
+                <meta charset="utf-8">
+                <title>${escapeHTML(title)}</title>
+                <style>
+                    body { font-family: Arial, Helvetica, sans-serif; padding: 24px; color: #1f2937; }
+                    h1 { font-size: 18px; margin-bottom: 4px; }
+                    p.meta { font-size: 12px; color: #6b7280; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; }
+                    th, td { border: 1px solid #d1d5db; padding: 6px 8px; text-align: left; }
+                    th { background: #f3f4f6; }
+                </style>
+            </head>
+            <body>
+                <h1>${escapeHTML(title)}</h1>
+                <p class="meta">
+                    CEPRODENT &middot;
+                    ${escapeHTML(new Date().toLocaleString())} &middot;
+                    ${data.length} registro(s)
+                </p>
+                <table>
+                    <thead><tr>
+                        ${headers.map(h => `<th>${escapeHTML(h)}</th>`).join('')}
+                    </tr></thead>
+                    <tbody>
+                        ${data.map(row => `
+                            <tr>
+                                ${headers.map(h => `<td>${escapeHTML(String(row[h] ?? ''))}</td>`).join('')}
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </body>
+        </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+        showToast('Permite las ventanas emergentes para exportar el PDF.', 'error');
+        return;
+    }
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 400);
 }
 
 /* ============================== TIEMPO REAL ============================== */
