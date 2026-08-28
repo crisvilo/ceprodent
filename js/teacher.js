@@ -105,7 +105,7 @@ function renderTeacherModules() {
                             <i class="fa-solid fa-circle"></i>
                             ${activa ? 'Evaluación activa' : 'Inactiva'}
                         </span>
-                        <span class="eval-badge ${isActive ? 'badge-active' : 'badge-inactive'}" style="background:${isActive ? '#10b981' : '#ef4444'}">
+                        <span class="eval-badge module-status ${isActive ? 'module-status-active' : 'module-status-inactive'}">
                             <i class="fa-solid ${isActive ? 'fa-check-circle' : 'fa-times-circle'}"></i>
                             ${isActive ? 'Módulo activo' : 'Módulo inactivo'}
                         </span>
@@ -144,12 +144,12 @@ function renderTeacherModules() {
                     </button>
 
                     <button
-                        class="btn-icon ${isActive ? 'btn-outline-success' : 'btn-outline-danger'}"
+                        class="btn-icon module-toggle-btn ${isActive ? 'module-toggle-active' : 'module-toggle-inactive'}"
                         title="${isActive ? 'Desactivar módulo' : 'Activar módulo'}"
                         onclick="toggleModuleStatus('${m.id}')"
-                        style="padding:0 12px; border:1px solid ${isActive ? '#10b981' : '#ef4444'}; border-radius:6px;"
+                        
                     >
-                        <i class="fa-solid ${isActive ? 'fa-toggle-on' : 'fa-toggle-off'}" style="color:${isActive ? '#10b981' : '#ef4444'}; font-size:1.4rem;"></i>
+                        <i class="fa-solid ${isActive ? 'fa-toggle-on' : 'fa-toggle-off'}"></i><span>${isActive ? 'Activo' : 'Inactivo'}</span>
                     </button>
                 </div>
             </div>
