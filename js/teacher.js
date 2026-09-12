@@ -1309,13 +1309,13 @@ function renderModuleGrades(notas) {
                             Estudiante
                         </th>
                         <th style="text-align:center; padding:12px">
-                            Promedio evaluaciones
+                            Evaluación
                         </th>
                         <th style="text-align:center; padding:12px">
-                            Nota adicional 1
+                            Producido
                         </th>
                         <th style="text-align:center; padding:12px">
-                            Nota adicional 2
+                            Conocimiento
                         </th>
                         <th style="text-align:center; padding:12px">
                             Nota final
@@ -1419,9 +1419,9 @@ function exportTeacherGrades(format) {
 
     const data = grades.map(g => ({
         'Estudiante': g.estudiante_nombre || 'N/A',
-        'Promedio evaluaciones': formatGrade(g.promedio_evaluaciones),
-        'Nota adicional 1': formatGrade(g.nota_adicional_1),
-        'Nota adicional 2': formatGrade(g.nota_adicional_2),
+        'Evaluación': formatGrade(g.promedio_evaluaciones),
+        'Producido': formatGrade(g.nota_adicional_1),
+        'Conocimiento': formatGrade(g.nota_adicional_2),
         'Nota final': formatGrade(g.nota_final)
     }));
 

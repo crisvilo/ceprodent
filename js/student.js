@@ -502,9 +502,9 @@ function renderStudentGrades(notas) {
     // Guardar datos para exportación
     APP.student._exportGrades = notas.map(nota => ({
         'Módulo': nota.modulo_nombre || 'Módulo',
-        'Promedio evaluaciones': formatStudentGrade(nota.promedio_evaluaciones),
-        'Nota adicional 1': formatStudentGrade(nota.nota_adicional_1),
-        'Nota adicional 2': formatStudentGrade(nota.nota_adicional_2),
+        'Evaluación': formatStudentGrade(nota.promedio_evaluaciones),
+        'Producido': formatStudentGrade(nota.nota_adicional_1),
+        'Conocimiento': formatStudentGrade(nota.nota_adicional_2),
         'Nota final': formatStudentGrade(nota.nota_final)
     }));
 
@@ -522,9 +522,9 @@ function renderStudentGrades(notas) {
                 <thead>
                     <tr>
                         <th style="text-align:left; padding:12px">Módulo</th>
-                        <th style="text-align:center; padding:12px">Promedio evaluaciones</th>
-                        <th style="text-align:center; padding:12px">Nota adicional 1</th>
-                        <th style="text-align:center; padding:12px">Nota adicional 2</th>
+                        <th style="text-align:center; padding:12px">Evaluación</th>
+                        <th style="text-align:center; padding:12px">Producido</th>
+                        <th style="text-align:center; padding:12px">Conocimiento</th>
                         <th style="text-align:center; padding:12px">Nota final</th>
                     </tr>
                 </thead>

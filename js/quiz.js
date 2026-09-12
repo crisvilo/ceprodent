@@ -197,7 +197,7 @@ async function submitQuiz() {
 function showQuizResult(resultado) {
     const nota = Number(resultado.calificacion).toFixed(1);
     document.getElementById('scoreNumber').textContent = nota;
-    document.getElementById('resultTitle').textContent = resultado.calificacion >= 6
+    document.getElementById('resultTitle').textContent = resultado.calificacion >= 3
         ? '¡Evaluación aprobada!'
         : 'Evaluación finalizada';
     document.getElementById('resultDetail').textContent =

@@ -125,8 +125,8 @@ function extractActiva(evalRelation) {
 /* --------------------------- Formato notas --------------------------- */
 
 function scoreClass(score) {
-    if (score >= 7) return '';
-    if (score >= 5) return 'mid';
+    if (score >= 4) return '';
+    if (score >= 3) return 'mid';
     return 'low';
 }
 
