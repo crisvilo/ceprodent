@@ -908,3 +908,21 @@ img, svg, video, canvas { max-width: 100%; }
     .card-actions .btn-primary, .module-toggle-btn { width: 100%; min-width: 100%; }
     .module-toggle-btn { height: 44px; }
 }
+
+
+/* Acción destructiva del módulo: visible sin competir con el control Activo/Inactivo. */
+.module-delete-btn {
+    min-width: 104px; height: 42px; padding: 0 13px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    border-radius: 10px; font-size: 0.78rem; font-weight: 700;
+    color: #b42318; background: #fff5f5; border: 1px solid #f3a6a0;
+    transition: var(--transition);
+}
+.module-delete-btn i { font-size: 1rem; }
+.module-delete-btn:hover {
+    color: #fff; background: #dc2626; border-color: #dc2626;
+    transform: translateY(-1px); box-shadow: 0 6px 14px rgba(220, 38, 38, 0.18);
+}
+@media (max-width: 480px) {
+    .module-delete-btn { width: 100%; min-width: 100%; height: 44px; }
+}

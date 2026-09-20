@@ -2,7 +2,7 @@
  * quiz.js
  * ----------------------------------------------------------------------
  * Presentación del examen por parte del estudiante:
- *   - Solicita 10 preguntas aleatorias del pool de 20 vía RPC (el
+ *   - Solicita 12 preguntas aleatorias del pool de 20 vía RPC (el
  *     servidor nunca envía la respuesta correcta al navegador).
  *   - Navegación pregunta por pregunta con barra de progreso y temporizador.
  *   - Envía las respuestas a la función calificar_examen(), que califica
@@ -197,7 +197,7 @@ async function submitQuiz() {
 function showQuizResult(resultado) {
     const nota = Number(resultado.calificacion).toFixed(1);
     document.getElementById('scoreNumber').textContent = nota;
-    document.getElementById('resultTitle').textContent = resultado.calificacion >= 3
+    document.getElementById('resultTitle').textContent = resultado.calificacion >= 6
         ? '¡Evaluación aprobada!'
         : 'Evaluación finalizada';
     document.getElementById('resultDetail').textContent =

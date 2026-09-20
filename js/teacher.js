@@ -19,6 +19,7 @@ APP.teacher = {
     currentModuleId: null,
     currentQuestionCount: 0,
     reportExport: null, // para exportaciones
+    loadedTabs: {},
 };
 
 /* ============================== DASHBOARD ============================== */
@@ -66,16 +67,20 @@ async function fetchTeacherModulesData() {
     APP.teacher.modules = data || [];
     renderTeacherModules();
 
-    const { data: programas, error: programasError } = await db
-        .from('programas')
-        .select('id, nombre')
-        .eq('activo', true)
-        .order('nombre');
+    // Los programas cambian con poca frecuencia: reutilizamos los ya cargados
+    // durante la sesión y evitamos una consulta cada vez que se actualiza el panel.
+    if (!APP.teacher.programs.length) {
+        const { data: programas, error: programasError } = await db
+            .from('programas')
+            .select('id, nombre')
+            .eq('activo', true)
+            .order('nombre');
 
-    if (!programasError) {
-        APP.teacher.programs = programas || [];
-        renderProgramaOptions();
+        if (!programasError) {
+            APP.teacher.programs = programas || [];
+        }
     }
+    renderProgramaOptions();
 }
 
 function renderTeacherModules() {
@@ -147,9 +152,15 @@ function renderTeacherModules() {
                         class="btn-icon module-toggle-btn ${isActive ? 'module-toggle-active' : 'module-toggle-inactive'}"
                         title="${isActive ? 'Desactivar módulo' : 'Activar módulo'}"
                         onclick="toggleModuleStatus('${m.id}')"
-                        
                     >
                         <i class="fa-solid ${isActive ? 'fa-toggle-on' : 'fa-toggle-off'}"></i><span>${isActive ? 'Activo' : 'Inactivo'}</span>
+                    </button>
+                    <button
+                        class="btn-icon module-delete-btn"
+                        title="Eliminar módulo"
+                        onclick="handleDeleteModule('${m.id}')"
+                    >
+                        <i class="fa-solid fa-trash"></i><span>Eliminar</span>
                     </button>
                 </div>
             </div>
@@ -200,15 +211,62 @@ async function toggleModuleStatus(moduloId) {
         showToast(`Módulo ${action}do correctamente.`, 'success');
 
         // Si estamos viendo el detalle de este módulo y lo desactivamos, cerramos el detalle.
+        const localModulo = APP.teacher.modules.find(m => m.id === moduloId);
+        if (localModulo) localModulo.activo = newState;
+        renderTeacherModules();
+
         if (APP.teacher.currentModuleId === moduloId && !newState) {
             backToModuleList();
-        } else {
-            await fetchTeacherModulesData();
         }
 
     } catch (error) {
         console.error('Error al cambiar estado del módulo:', error);
         showToast(friendlyError(error), 'error');
+    }
+}
+
+/* ============================== ELIMINAR MÓDULO ============================== */
+
+async function handleDeleteModule(moduloId) {
+    const modulo = APP.teacher.modules.find(m => m.id === moduloId);
+    if (!modulo) {
+        showToast('No se encontró el módulo.', 'error');
+        return;
+    }
+
+    const confirmado = confirm(
+        `¿Eliminar definitivamente el módulo "${modulo.nombre}"?\n\n` +
+        'Se eliminarán también sus preguntas, inscripciones, evaluación y resultados asociados. Esta acción no se puede deshacer.'
+    );
+    if (!confirmado) return;
+
+    const button = document.querySelector(`button[onclick="handleDeleteModule('${moduloId}')"]`);
+    if (button) setButtonLoading(button, true, 'Eliminando...');
+
+    try {
+        const { error } = await db
+            .from('modulos')
+            .delete()
+            .eq('id', moduloId);
+
+        if (error) throw error;
+
+        APP.teacher.modules = APP.teacher.modules.filter(m => m.id !== moduloId);
+        delete APP.teacher.loadedTabs[moduloId];
+
+        if (APP.teacher.currentModuleId === moduloId) {
+            APP.teacher.currentModuleId = null;
+            document.getElementById('moduleDetailPanel').classList.add('hidden');
+            document.getElementById('teacherModulesPanel').classList.remove('hidden');
+        }
+
+        renderTeacherModules();
+        showToast('Módulo eliminado correctamente.', 'success');
+    } catch (error) {
+        console.error('Error al eliminar módulo:', error);
+        showToast(friendlyError(error), 'error');
+    } finally {
+        if (button) setButtonLoading(button, false);
     }
 }
 
@@ -264,12 +322,13 @@ async function handleCreateModule(event) {
                 .insert({
                     nombre: programaNuevo
                 })
-                .select('id')
+                .select('id, nombre')
                 .single();
 
             if (progError) throw progError;
 
             programaId = nuevoPrograma.id;
+            APP.teacher.programs.push(nuevoPrograma);
         }
 
         const { data: nuevoModulo, error: modError } = await db
@@ -317,34 +376,26 @@ async function openModuleDetail(moduloId) {
     }
 
     APP.teacher.currentModuleId = moduloId;
+    APP.teacher.loadedTabs[moduloId] = { preguntas: false, estudiantes: false, resultados: false, notas: false };
+
+    document.getElementById('teacherModulesPanel').classList.add('hidden');
+    document.getElementById('moduleDetailPanel').classList.remove('hidden');
 
     activateTeacherTab('preguntas');
-
-    document.getElementById('teacherModulesPanel')
-        .classList.add('hidden');
-
-    document.getElementById('moduleDetailPanel')
-        .classList.remove('hidden');
-
-    await Promise.all([
-        loadModuleHeader(moduloId),
-        loadModuleQuestions(moduloId),
-        loadModuleStudents(moduloId),
-        loadModuleResults(moduloId),
-        loadModuleGrades(moduloId)
-    ]);
+    await loadModuleHeader(moduloId);
+    await loadModuleQuestions(moduloId);
+    APP.teacher.loadedTabs[moduloId].preguntas = true;
 }
 
 function backToModuleList() {
     APP.teacher.currentModuleId = null;
 
-    document.getElementById('moduleDetailPanel')
-        .classList.add('hidden');
+    document.getElementById('moduleDetailPanel').classList.add('hidden');
+    document.getElementById('teacherModulesPanel').classList.remove('hidden');
 
-    document.getElementById('teacherModulesPanel')
-        .classList.remove('hidden');
-
-    loadTeacherDashboard();
+    // No volvemos a consultar Supabase: la lista local ya fue actualizada
+    // después de crear/eliminar/cambiar estado/preguntas del módulo.
+    renderTeacherModules();
 }
 
 async function loadModuleHeader(moduloId) {
@@ -389,14 +440,14 @@ function updateToggleLabel(activa) {
 
 function syncEvalToggleAvailability() {
     const toggle = document.getElementById('evalToggle');
-    const puedeActivar = APP.teacher.currentQuestionCount >= 10;
+    const puedeActivar = APP.teacher.currentQuestionCount >= 12;
 
     if (!toggle.checked) {
         toggle.disabled = !puedeActivar;
 
         toggle.title = puedeActivar
             ? ''
-            : `Necesitas al menos 10 preguntas en el banco (tienes ${APP.teacher.currentQuestionCount}).`;
+            : `Necesitas al menos 12 preguntas en el banco (tienes ${APP.teacher.currentQuestionCount}).`;
 
     } else {
         toggle.disabled = false;
@@ -409,11 +460,11 @@ async function handleToggleEvaluation(event) {
     const isActive = checkbox.checked;
     const moduloId = APP.teacher.currentModuleId;
 
-    if (isActive && APP.teacher.currentQuestionCount < 10) {
+    if (isActive && APP.teacher.currentQuestionCount < 12) {
         checkbox.checked = false;
 
         showToast(
-            `Necesitas al menos 10 preguntas en el banco para activar la evaluación (tienes ${APP.teacher.currentQuestionCount}).`,
+            `Necesitas al menos 12 preguntas en el banco para activar la evaluación (tienes ${APP.teacher.currentQuestionCount}).`,
             'error',
             5500
         );
@@ -437,14 +488,16 @@ async function handleToggleEvaluation(event) {
 
         updateToggleLabel(isActive);
 
+        const modulo = APP.teacher.modules.find(m => m.id === moduloId);
+        if (modulo) modulo.evaluaciones_activas = [{ activa: isActive }];
+        renderTeacherModules();
+
         showToast(
             isActive
                 ? 'Evaluación activada. Los estudiantes ya pueden presentarla.'
                 : 'Evaluación desactivada.',
             'success'
         );
-
-        fetchTeacherModulesData();
 
     } catch (error) {
         checkbox.checked = !isActive;
@@ -507,7 +560,7 @@ function renderQuestionsList(preguntas) {
                 <h3>Sin preguntas todavía</h3>
                 <p>
                     Agrega preguntas con el formulario de arriba.
-                    Necesitas al menos 10 para poder activar la evaluación.
+                    Necesitas al menos 12 para poder activar la evaluación.
                 </p>
             </div>
         `;
@@ -592,7 +645,7 @@ async function handleAddQuestion(event) {
         );
 
         await loadModuleQuestions(moduloId);
-        await fetchTeacherModulesData();
+        refreshCurrentModuleQuestionCount();
 
     } catch (error) {
         showToast(friendlyError(error), 'error');
@@ -618,11 +671,18 @@ async function handleDeleteQuestion(preguntaId) {
         showToast('Pregunta eliminada.', 'info', 2500);
 
         await loadModuleQuestions(APP.teacher.currentModuleId);
-        await fetchTeacherModulesData();
+        refreshCurrentModuleQuestionCount();
 
     } catch (error) {
         showToast(friendlyError(error), 'error');
     }
+}
+
+function refreshCurrentModuleQuestionCount() {
+    const modulo = APP.teacher.modules.find(m => m.id === APP.teacher.currentModuleId);
+    if (!modulo) return;
+    modulo.banco_preguntas = Array.from({ length: APP.teacher.currentQuestionCount }, (_, i) => ({ id: `count-${i}` }));
+    renderTeacherModules();
 }
 
 /* ============================== ESTUDIANTES ============================== */
@@ -1309,13 +1369,13 @@ function renderModuleGrades(notas) {
                             Estudiante
                         </th>
                         <th style="text-align:center; padding:12px">
-                            Evaluación
+                            Promedio evaluacion
                         </th>
                         <th style="text-align:center; padding:12px">
                             Producido
                         </th>
                         <th style="text-align:center; padding:12px">
-                            Conocimiento
+                            Comprendido
                         </th>
                         <th style="text-align:center; padding:12px">
                             Nota final
@@ -1419,9 +1479,9 @@ function exportTeacherGrades(format) {
 
     const data = grades.map(g => ({
         'Estudiante': g.estudiante_nombre || 'N/A',
-        'Evaluación': formatGrade(g.promedio_evaluaciones),
-        'Producido': formatGrade(g.nota_adicional_1),
-        'Conocimiento': formatGrade(g.nota_adicional_2),
+        'Promedio evaluaciones': formatGrade(g.promedio_evaluaciones),
+        'Nota adicional 1': formatGrade(g.nota_adicional_1),
+        'Nota adicional 2': formatGrade(g.nota_adicional_2),
         'Nota final': formatGrade(g.nota_final)
     }));
 
@@ -1697,9 +1757,18 @@ function initTeacherTabs() {
     tabsContainer.dataset.initialized = 'true';
 
     tabsContainer.querySelectorAll('.tab-btn').forEach(button => {
-        button.addEventListener('click', () => {
+        button.addEventListener('click', async () => {
             const tabName = button.dataset.tab;
             activateTeacherTab(tabName);
+            const moduloId = APP.teacher.currentModuleId;
+            if (!moduloId) return;
+            const state = APP.teacher.loadedTabs[moduloId] || (APP.teacher.loadedTabs[moduloId] = {});
+            if (state[tabName]) return;
+
+            if (tabName === 'estudiantes') await loadModuleStudents(moduloId);
+            if (tabName === 'resultados') await loadModuleResults(moduloId);
+            if (tabName === 'notas') await loadModuleGrades(moduloId);
+            state[tabName] = true;
         });
     });
 }
